@@ -107,7 +107,7 @@ async def sync_account(account: AffiliateAccount, network_type: str, days_back: 
                     )
                 )
             )
-            stat_obj = existing.scalar_one_or_none()
+            stat_obj = existing.scalars().first()
 
             if stat_obj:
                 stat_obj.clicks = row.get("clicks", 0)
