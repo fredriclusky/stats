@@ -180,3 +180,46 @@ class EverflowAdapter(BaseAdapter):
                 "raw": rep,
             })
         return results
+
+    async def get_joe_sub_ids(self, start_date, end_date) -> list[dict]:
+        """
+        Enumerate all of Joe's unique Sub IDs (sub1 for Everflow) seen in the period.
+        """
+        payload = {
+            "from": str(start_date),
+            "to": str(end_date),
+            "timezone_id": self.timezone_id,
+            "currency_id": "USD",
+            "columns": [
+                {"column": "offer"},
+                {"column": "sub1"},
+                {"column": "date"},
+            ],
+            "query": {"filters": []},
+        }
+        import httpx as _httpx
+        async with _httpx.AsyncClient(timeout=60) as client:
+            resp = await client.post(
+                f"{self.base_url}/affiliates/reporting/entity/table",
+                headers=self._headers(),
+                json=payload,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+
+        results = []
+        for row in data.get("table", []):
+            cols = row.get("columns", [])
+            rep = row.get("reporting", {})
+            sub1 = self._col(cols, "sub1") or None
+            if not sub1 or sub1 == "0":
+                continue
+            results.append({
+                "sub_id_value": sub1,
+                "campaign_name": self._col_label(cols, "offer"),
+                "date": self._ts_to_date(self._col(cols, "date")),
+                "clicks": int(rep.get("total_click", 0) or 0),
+                "conversions": int(rep.get("cv", 0) or 0),
+                "revenue": float(rep.get("revenue", 0) or 0),
+            })
+        return results

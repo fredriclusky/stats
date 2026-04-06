@@ -230,3 +230,42 @@ class HasOffersAdapter(BaseAdapter):
                 "raw": stat,
             })
         return results
+
+    async def get_joe_sub_ids(self, start_date, end_date) -> list[dict]:
+        """
+        Enumerate all of Joe's unique Sub IDs (affiliate_info2 / slot 2) seen in the period.
+        Groups by date + offer + affiliate_info2 only — no accuracy issue since info1 is excluded.
+        Skips rows where affiliate_info2 is empty.
+        """
+        if self.access_mode == "network":
+            target, info2_field = "Report", "Stat.sub2"
+        else:
+            target, info2_field = "Affiliate_Report", "Stat.affiliate_info2"
+
+        params = {
+            "fields[]": [
+                "Stat.date", "Stat.offer_id", "Offer.name",
+                "Stat.clicks", "Stat.conversions", "Stat.payout", info2_field,
+            ],
+            "groups[]": ["Stat.date", "Stat.offer_id", info2_field],
+            "filters[Stat.date][conditional]": "BETWEEN",
+            "filters[Stat.date][values][]": [str(start_date), str(end_date)],
+            "totals": "1",
+        }
+        rows = await self._request_all_pages(target, "getStats", params)
+        results = []
+        for row in rows:
+            stat = row.get("Stat", row)
+            offer = row.get("Offer", {})
+            sub2 = stat.get("affiliate_info2") or stat.get("sub2") or None
+            if not sub2:
+                continue
+            results.append({
+                "sub_id_value": sub2,
+                "campaign_name": offer.get("name", ""),
+                "date": stat.get("date"),
+                "clicks": int(stat.get("clicks", 0) or 0),
+                "conversions": int(stat.get("conversions", 0) or 0),
+                "revenue": float(stat.get("payout", 0) or 0),
+            })
+        return results

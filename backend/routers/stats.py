@@ -377,3 +377,125 @@ async def offer_intelligence(
         }
         for g in sorted_groups
     ]
+
+
+# ---------------------------------------------------------------------------
+# Joe Sub-ID Stats Endpoint
+# ---------------------------------------------------------------------------
+from backend.models.joe_subid import JoeSubIdStat
+
+
+@router.get("/joe-subids")
+async def joe_subids(
+    period: str = "week",
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    search: Optional[str] = None,
+    db: AsyncSession = Depends(get_db),
+    _=Depends(require_any_role),
+):
+    """
+    Return Joe's unique Sub IDs with aggregated stats for the requested period.
+    Includes per-account breakdown and day-by-day detail rows.
+    """
+    start, end = get_date_range(period, start_date, end_date)
+
+    q = (
+        select(
+            JoeSubIdStat.sub_id_value,
+            AffiliateAccount.id.label("account_id"),
+            AffiliateAccount.label.label("account_label"),
+            AffiliateNetwork.name.label("network_name"),
+            JoeSubIdStat.stat_date,
+            JoeSubIdStat.revenue,
+            JoeSubIdStat.clicks,
+            JoeSubIdStat.conversions,
+            JoeSubIdStat.offer_name,
+        )
+        .join(AffiliateAccount, JoeSubIdStat.account_id == AffiliateAccount.id)
+        .join(AffiliateNetwork, AffiliateAccount.network_id == AffiliateNetwork.id)
+        .where(
+            and_(
+                JoeSubIdStat.stat_date >= start,
+                JoeSubIdStat.stat_date <= end,
+            )
+        )
+        .order_by(JoeSubIdStat.stat_date.asc())
+    )
+
+    if search:
+        q = q.where(JoeSubIdStat.sub_id_value.ilike(f"%{search}%"))
+
+    result = await db.execute(q)
+    rows = result.all()
+
+    # Group by sub_id_value
+    groups: dict = {}
+    for r in rows:
+        key = r.sub_id_value
+        if key not in groups:
+            groups[key] = {
+                "sub_id": r.sub_id_value,
+                "revenue": 0.0,
+                "clicks": 0,
+                "conversions": 0,
+                "offer_names": set(),
+                "first_seen": r.stat_date,
+                "last_seen": r.stat_date,
+                "accounts": {},
+                "days": [],
+            }
+        g = groups[key]
+        g["revenue"] += float(r.revenue)
+        g["clicks"] += int(r.clicks)
+        g["conversions"] += int(r.conversions)
+        if r.offer_name:
+            g["offer_names"].add(r.offer_name)
+        if r.stat_date < g["first_seen"]:
+            g["first_seen"] = r.stat_date
+        if r.stat_date > g["last_seen"]:
+            g["last_seen"] = r.stat_date
+
+        # Per-account aggregate
+        acc_key = r.account_id
+        if acc_key not in g["accounts"]:
+            g["accounts"][acc_key] = {
+                "account_id": r.account_id,
+                "account_label": r.account_label,
+                "network_name": r.network_name,
+                "revenue": 0.0,
+                "clicks": 0,
+                "conversions": 0,
+            }
+        g["accounts"][acc_key]["revenue"] += float(r.revenue)
+        g["accounts"][acc_key]["clicks"] += int(r.clicks)
+        g["accounts"][acc_key]["conversions"] += int(r.conversions)
+
+        # Day-level detail
+        g["days"].append({
+            "date": str(r.stat_date),
+            "account_label": r.account_label,
+            "network_name": r.network_name,
+            "revenue": float(r.revenue),
+            "clicks": int(r.clicks),
+            "conversions": int(r.conversions),
+            "offer_name": r.offer_name,
+        })
+
+    sorted_groups = sorted(groups.values(), key=lambda x: x["revenue"], reverse=True)
+
+    return [
+        {
+            "sub_id": g["sub_id"],
+            "revenue": round(g["revenue"], 2),
+            "clicks": g["clicks"],
+            "conversions": g["conversions"],
+            "epc": round(g["revenue"] / g["clicks"] * 100, 4) if g["clicks"] else 0.0,
+            "offer_names": sorted(g["offer_names"]),
+            "first_seen": str(g["first_seen"]),
+            "last_seen": str(g["last_seen"]),
+            "accounts": list(g["accounts"].values()),
+            "days": sorted(g["days"], key=lambda d: d["date"]),
+        }
+        for g in sorted_groups
+    ]

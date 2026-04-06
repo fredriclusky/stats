@@ -5,6 +5,8 @@ const NETWORK_TYPES = ['hasoffers', 'everflow', 'custom']
 
 interface TestResult { ok: boolean; message: string; loading: boolean }
 
+const defaultSlot = (networkType: string) => networkType === 'hasoffers' ? 2 : 1
+
 export default function Networks() {
   const [networks, setNetworks] = useState<any[]>([])
   const [accounts, setAccounts] = useState<any[]>([])
@@ -13,7 +15,7 @@ export default function Networks() {
   const [netForm, setNetForm] = useState({ name: '', network_type: 'hasoffers' })
   const [accForm, setAccForm] = useState({
     network_id: 0, label: '', api_key: '', api_base_url: '',
-    network_id_value: '', access_mode: 'affiliate',
+    network_id_value: '', access_mode: 'affiliate', joe_tracking_slot: 2,
   })
   const [testResults, setTestResults] = useState<Record<number, TestResult>>({})
 
@@ -27,6 +29,12 @@ export default function Networks() {
   const selectedNetworkType = networks.find(n => n.id === accForm.network_id)?.type || 'hasoffers'
   const isHasOffers = selectedNetworkType === 'hasoffers'
 
+  // When network changes, auto-fill the tracking slot default
+  const handleNetworkChange = (networkId: number) => {
+    const nt = networks.find(n => n.id === networkId)?.type || 'hasoffers'
+    setAccForm(f => ({ ...f, network_id: networkId, joe_tracking_slot: defaultSlot(nt) }))
+  }
+
   const createNetwork = async () => {
     await api.post('/affiliates/networks', netForm)
     setShowNetForm(false)
@@ -35,7 +43,9 @@ export default function Networks() {
   }
 
   const createAccount = async () => {
-    const config: Record<string, any> = {}
+    const config: Record<string, any> = {
+      joe_tracking_slot: accForm.joe_tracking_slot,
+    }
     if (isHasOffers) {
       config.access_mode = accForm.access_mode
     }
@@ -48,7 +58,7 @@ export default function Networks() {
       config_json: config,
     })
     setShowAccForm(false)
-    setAccForm({ network_id: 0, label: '', api_key: '', api_base_url: '', network_id_value: '', access_mode: 'affiliate' })
+    setAccForm({ network_id: 0, label: '', api_key: '', api_base_url: '', network_id_value: '', access_mode: 'affiliate', joe_tracking_slot: 2 })
     load()
   }
 
@@ -120,11 +130,11 @@ export default function Networks() {
 
         {showAccForm && (
           <div className="px-4 py-3 bg-gray-800/50 border-b border-gray-700 space-y-4">
-            {/* Row 1: Network + Label */}
+            {/* Row 1: Network + Label + Access Mode */}
             <div className="flex flex-wrap gap-3">
               <div className="flex flex-col gap-1">
                 <label className="text-gray-500 text-xs">Network *</label>
-                <select className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white" value={accForm.network_id} onChange={e => setAccForm({...accForm, network_id: parseInt(e.target.value)})}>
+                <select className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white" value={accForm.network_id} onChange={e => handleNetworkChange(parseInt(e.target.value))}>
                   <option value={0}>Select Network</option>
                   {networks.map(n => <option key={n.id} value={n.id}>{n.name} ({n.type})</option>)}
                 </select>
@@ -142,6 +152,21 @@ export default function Networks() {
                   </select>
                 </div>
               )}
+              <div className="flex flex-col gap-1">
+                <label className="text-gray-500 text-xs">Joe's Tracking Slot</label>
+                <select
+                  className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white"
+                  value={accForm.joe_tracking_slot}
+                  onChange={e => setAccForm({...accForm, joe_tracking_slot: parseInt(e.target.value)})}
+                >
+                  {[1,2,3,4,5].map(n => (
+                    <option key={n} value={n}>Sub-ID {n}{n === defaultSlot(selectedNetworkType) ? ' (default)' : ''}</option>
+                  ))}
+                </select>
+                <span className="text-yellow-600/70 text-xs">
+                  {isHasOffers ? 'Joe uses Sub-ID 2 for NeptuneAds' : 'Joe uses Sub-ID 1 for Everflow'}
+                </span>
+              </div>
             </div>
 
             {/* Row 2: Credentials */}
@@ -189,6 +214,11 @@ export default function Networks() {
                     <span className="text-gray-500 text-xs">{getNetworkName(a.network_id)}</span>
                     <span className="px-1.5 py-0.5 rounded bg-gray-800 text-gray-500 text-xs">{getNetworkType(a.network_id)}</span>
                     {a.network_id_value && <span className="text-yellow-600/70 text-xs font-mono">ID: {a.network_id_value}</span>}
+                    {a.config_json?.joe_tracking_slot && (
+                      <span className="px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-400 text-xs">
+                        Joe → Sub-ID {a.config_json.joe_tracking_slot}
+                      </span>
+                    )}
                   </div>
                   {testResults[a.id] && (
                     <div className={`mt-1.5 text-xs px-2 py-1 rounded-lg inline-block ${testResults[a.id].loading ? 'text-gray-500' : testResults[a.id].ok ? 'text-green-400 bg-green-500/10' : 'text-red-400 bg-red-500/10'}`}>
