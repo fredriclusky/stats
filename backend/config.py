@@ -12,6 +12,8 @@ class Settings(BaseSettings):
     openai_api_key: str = ""
     admin_username: str = "admin"
     admin_password: str = "changeme123"
+    joe_webhook_url: str = ""
+    joe_api_key: str = ""
 
     class Config:
         env_file = "/opt/stats-tool/.env"

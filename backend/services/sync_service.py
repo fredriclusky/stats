@@ -235,3 +235,11 @@ async def sync_all_accounts(days_back: int = 1):
         total += count
     logger.info(f"Total sync complete: {total} rows across {len(accounts)} accounts")
     return total
+
+
+async def sync_and_push(days_back: int = 1):
+    """Full sync cycle: pull affiliate stats, sync Joe sub-IDs, push changes to Joe."""
+    total = await sync_all_accounts(days_back=days_back)
+    from backend.services.joe_push_service import push_joe_updates
+    await push_joe_updates()
+    return total

@@ -10,7 +10,7 @@ import os
 
 from backend.database import init_db
 from backend.routers import auth, affiliates, campaigns, stats, inbound, outbound, partner, suggestions, schedule, sync
-from backend.services.sync_service import sync_all_accounts
+from backend.services.sync_service import sync_all_accounts, sync_and_push
 from backend.models.user import User
 from backend.database import AsyncSessionLocal
 from backend.routers.auth import hash_password
@@ -43,9 +43,9 @@ async def lifespan(app: FastAPI):
     await init_db()
     await ensure_admin_user()
     scheduler.add_job(
-        sync_all_accounts,
+        sync_and_push,
         IntervalTrigger(minutes=15),
-        id="sync_affiliates",
+        id="sync_and_push",
         replace_existing=True,
         kwargs={"days_back": 2}
     )

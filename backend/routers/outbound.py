@@ -137,3 +137,11 @@ async def get_outbound_log(limit: int = 100, db: AsyncSession = Depends(get_db),
         {"id": l.id, "sub_id": l.sub_id_value, "revenue_sent": float(l.revenue_sent or 0), "sent_at": l.sent_at}
         for l in logs
     ]
+
+
+@router.post("/push-joe")
+async def manual_push_joe(_=Depends(require_admin)):
+    """Manually trigger a push of changed sub_id revenue to Joe webhook."""
+    from backend.services.joe_push_service import push_joe_updates
+    result = await push_joe_updates()
+    return result
