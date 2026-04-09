@@ -25,7 +25,7 @@ function today() {
 }
 
 export default function Dashboard() {
-  const [period, setPeriod] = useState<Period>('week')
+  const [period, setPeriod] = useState<Period>('today')
   const [customStart, setCustomStart] = useState(today())
   const [customEnd, setCustomEnd] = useState(today())
   const [showCal, setShowCal] = useState(false)
