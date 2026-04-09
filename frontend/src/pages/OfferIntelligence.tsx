@@ -63,7 +63,7 @@ export default function OfferIntelligence() {
   const [selectedAccount, setSelectedAccount] = useState<number | null>(null)
 
   const [loading, setLoading] = useState(true)
-  const [sortKey, setSortKey] = useState<SortKey>('revenue')
+  const [sortKey, setSortKey] = useState<SortKey>('epc')
   const [sortAsc, setSortAsc] = useState(false)
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [search, setSearch] = useState('')
