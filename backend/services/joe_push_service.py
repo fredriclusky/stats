@@ -88,7 +88,7 @@ async def push_joe_updates() -> dict:
             logger.info(f"Pushed sub_id {sub_id}: ${revenue:.2f} (was ${last_sent})")
         except Exception as e:
             errors += 1
-            error_msg = str(e)[:500]
+            error_msg = str(e)[:500] or f"{type(e).__name__}"
             logger.error(f"Failed to push sub_id {sub_id}: {e}")
 
         # Update the push log regardless of success/failure (to track errors)
