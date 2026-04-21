@@ -323,6 +323,9 @@ export default function OfferIntelligence() {
                                   <div className="text-gray-500 text-xs mt-0.5">
                                     {fmtNum(acct.clicks)} clicks · {acct.conversions} conv.
                                   </div>
+                                  <div className={`text-xs mt-0.5 font-mono ${acct.clicks > 0 ? (acct.revenue/acct.clicks*100 >= 0.08 ? 'text-green-400' : acct.revenue/acct.clicks*100 >= 0.04 ? 'text-yellow-400' : 'text-red-400') : 'text-gray-600'}`}>
+                                    {acct.clicks > 0 ? (acct.revenue / acct.clicks * 100).toFixed(4) + '¢ EPC' : '—'}
+                                  </div>
                                 </div>
                               ))}
                             </div>
