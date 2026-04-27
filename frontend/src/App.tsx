@@ -10,6 +10,7 @@ import Suggestions from './pages/Suggestions'
 import Schedule from './pages/Schedule'
 import OfferIntelligence from './pages/OfferIntelligence'
 import PartnerView from './pages/PartnerView'
+import KarlinStats from './pages/KarlinStats'
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const token = localStorage.getItem('token')
@@ -19,8 +20,14 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
 
 function RequireAdmin({ children }: { children: React.ReactNode }) {
   const role = localStorage.getItem('role')
-  if (role !== 'admin') return <Navigate to="/" replace />
+  if (role !== 'admin') return <Navigate to="/karlin" replace />
   return <>{children}</>
+}
+
+function HomeRoute() {
+  const role = localStorage.getItem('role')
+  if (role === 'partner') return <Navigate to="/karlin" replace />
+  return <Layout><Dashboard /></Layout>
 }
 
 export default function App() {
@@ -28,8 +35,9 @@ export default function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/login" element={<Login />} />
+        <Route path="/karlin" element={<RequireAuth><KarlinStats /></RequireAuth>} />
         <Route path="/partner" element={<RequireAuth><PartnerView /></RequireAuth>} />
-        <Route path="/" element={<RequireAuth><Layout><Dashboard /></Layout></RequireAuth>} />
+        <Route path="/" element={<RequireAuth><HomeRoute /></RequireAuth>} />
         <Route path="/campaigns" element={<RequireAuth><RequireAdmin><Layout><Campaigns /></Layout></RequireAdmin></RequireAuth>} />
         <Route path="/networks" element={<RequireAuth><RequireAdmin><Layout><Networks /></Layout></RequireAdmin></RequireAuth>} />
         <Route path="/subids" element={<RequireAuth><RequireAdmin><Layout><SubIDs /></Layout></RequireAdmin></RequireAuth>} />

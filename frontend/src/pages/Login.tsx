@@ -18,7 +18,7 @@ export default function Login() {
       const res = await axios.post('/api/auth/token', form)
       localStorage.setItem('token', res.data.access_token)
       localStorage.setItem('role', res.data.role)
-      window.location.href = '/'
+      window.location.href = res.data.role === 'partner' ? '/karlin' : '/'
     } catch {
       setError('Invalid username or password')
     } finally {
