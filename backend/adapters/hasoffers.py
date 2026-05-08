@@ -269,3 +269,52 @@ class HasOffersAdapter(BaseAdapter):
                 "revenue": float(stat.get("payout", 0) or 0),
             })
         return results
+
+
+    async def get_conversions(self, start_date, end_date) -> list[dict]:
+        """Pull conversion-level rows with actual conversion datetimes."""
+        target = "Report" if self.access_mode == "network" else "Affiliate_Report"
+        info1_field = "Stat.sub1" if self.access_mode == "network" else "Stat.affiliate_info1"
+        info2_field = "Stat.sub2" if self.access_mode == "network" else "Stat.affiliate_info2"
+        start_dt = f"{start_date} 00:00:00"
+        end_dt = f"{end_date} 23:59:59"
+        params = {
+            "fields[]": [
+                "Stat.id",
+                "Stat.datetime",
+                "Stat.date",
+                "Stat.offer_id",
+                "Offer.name",
+                "Stat.approved_payout",
+                "Stat.conversion_status",
+                info1_field,
+                info2_field,
+            ],
+            "filters[Stat.datetime][conditional]": "BETWEEN",
+            "filters[Stat.datetime][values][]": [start_dt, end_dt],
+            "data_start": str(start_date),
+            "data_end": str(end_date),
+            "count": "1",
+        }
+        rows = await self._request_all_pages(target, "getConversions", params)
+        results = []
+        for row in rows:
+            stat = row.get("Stat", row)
+            offer = row.get("Offer", {})
+            conv_id = stat.get("id") or stat.get("ad_id")
+            conv_dt = stat.get("datetime")
+            if not conv_id or not conv_dt:
+                continue
+            results.append({
+                "network_conversion_id": str(conv_id),
+                "conversion_at": conv_dt,
+                "date": stat.get("date"),
+                "campaign_id": str(stat.get("offer_id", "")),
+                "campaign_name": offer.get("name", ""),
+                "sub_id": stat.get("affiliate_info2") or stat.get("sub2") or None,
+                "sub_id1": stat.get("affiliate_info1") or stat.get("sub1") or None,
+                "revenue": float(stat.get("approved_payout", 0) or 0),
+                "status": stat.get("conversion_status"),
+                "raw": stat,
+            })
+        return results

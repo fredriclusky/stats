@@ -223,3 +223,56 @@ class EverflowAdapter(BaseAdapter):
                 "revenue": float(rep.get("revenue", 0) or 0),
             })
         return results
+
+
+    async def get_conversions(self, start_date, end_date) -> list[dict]:
+        """Pull conversion-level rows with actual conversion timestamps."""
+        payload = {
+            "from": f"{start_date} 00:00:00",
+            "to": f"{end_date} 23:59:59",
+            "timezone_id": self.timezone_id,
+            "currency_id": "USD",
+            "show_conversions": True,
+            "show_events": False,
+            "query": {"filters": []},
+        }
+        async with httpx.AsyncClient(timeout=60) as client:
+            resp = await client.post(
+                f"{self.base_url}/affiliates/reporting/conversions",
+                headers=self._headers(),
+                json=payload,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+
+        raw_rows = data.get("conversions") or data.get("table") or data.get("data") or []
+        if isinstance(raw_rows, dict):
+            raw_rows = raw_rows.get("conversions") or raw_rows.get("entries") or list(raw_rows.values())
+
+        results = []
+        for row in raw_rows:
+            conv = row.get("conversion", row) if isinstance(row, dict) else {}
+            conv_id = (
+                conv.get("conversion_id") or conv.get("network_conversion_id") or conv.get("id")
+                or conv.get("transaction_id") or conv.get("event_id")
+            )
+            ts = conv.get("conversion_unix_timestamp") or conv.get("unix_timestamp") or conv.get("conversion_time")
+            if not conv_id or not ts:
+                continue
+            offer = conv.get("offer") or conv.get("network_offer") or {}
+            offer_id = conv.get("network_offer_id") or conv.get("offer_id") or offer.get("network_offer_id") or offer.get("id")
+            offer_name = conv.get("offer_name") or offer.get("name") or ""
+            sub1 = conv.get("sub1") or conv.get("sub_id1") or conv.get("source_id") or None
+            revenue = conv.get("revenue") or conv.get("payout") or conv.get("sale_amount") or 0
+            results.append({
+                "network_conversion_id": str(conv_id),
+                "conversion_at": ts,
+                "campaign_id": str(offer_id or ""),
+                "campaign_name": offer_name,
+                "sub_id": sub1 if sub1 and sub1 != "0" else None,
+                "sub_id1": sub1 if sub1 and sub1 != "0" else None,
+                "revenue": float(revenue or 0),
+                "status": conv.get("conversion_status") or conv.get("status"),
+                "raw": conv,
+            })
+        return results

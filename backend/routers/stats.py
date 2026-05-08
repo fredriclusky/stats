@@ -9,12 +9,13 @@ EASTERN = zoneinfo.ZoneInfo("America/New_York")
 def today_eastern() -> datetime.date:
     return datetime.datetime.now(EASTERN).date()
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, and_, case
+from sqlalchemy import select, func, and_
 
 from backend.database import get_db
 from backend.models.stats import AffiliateStat
 from backend.models.campaign import Campaign, CampaignMapping
 from backend.models.affiliate import AffiliateAccount, AffiliateNetwork
+from backend.models.conversion import AffiliateConversion
 from backend.routers.auth import require_admin, require_any_role
 
 router = APIRouter(prefix="/api/stats", tags=["stats"])
@@ -59,9 +60,6 @@ async def get_summary(
             func.coalesce(func.sum(AffiliateStat.revenue), 0).label("revenue"),
             func.coalesce(func.sum(AffiliateStat.clicks), 0).label("clicks"),
             func.coalesce(func.sum(AffiliateStat.conversions), 0).label("conversions"),
-            func.max(
-                case((AffiliateStat.conversions > 0, AffiliateStat.synced_at), else_=None)
-            ).label("last_conversion_at"),
         )
         .join(CampaignMapping, AffiliateStat.campaign_mapping_id == CampaignMapping.id)
     )
@@ -75,9 +73,21 @@ async def get_summary(
     q = q.where(and_(*filters))
     result = await db.execute(q)
     row = result.one()
+
+    conv_filters = [AffiliateConversion.stat_date >= start, AffiliateConversion.stat_date <= end]
+    if account_id:
+        conv_filters.append(AffiliateConversion.account_id == account_id)
+    if campaign_id:
+        conv_filters.append(AffiliateConversion.campaign_id == str(campaign_id))
+
+    conv_result = await db.execute(
+        select(func.max(AffiliateConversion.conversion_at).label("last_conversion_at"))
+        .where(and_(*conv_filters))
+    )
+    conv_row = conv_result.one()
     last_conversion_at = None
-    if row.last_conversion_at:
-        last_conversion_at = row.last_conversion_at.replace(tzinfo=datetime.timezone.utc).astimezone(EASTERN).isoformat()
+    if conv_row.last_conversion_at:
+        last_conversion_at = conv_row.last_conversion_at.replace(tzinfo=datetime.timezone.utc).astimezone(EASTERN).isoformat()
 
     return {
         "period": period,

@@ -1,4 +1,4 @@
-from datetime import timedelta, datetime
+from datetime import timedelta, datetime, timezone
 import datetime as _dt
 import zoneinfo
 
@@ -15,9 +15,41 @@ from backend.models.affiliate import AffiliateAccount, AffiliateNetwork
 from backend.models.campaign import Campaign, CampaignMapping
 from backend.models.stats import AffiliateStat
 from backend.models.joe_subid import JoeSubIdStat
+from backend.models.conversion import AffiliateConversion
 from backend.adapters import get_adapter
 
 logger = logging.getLogger(__name__)
+
+
+def _parse_conversion_datetime(value):
+    """Normalize network conversion time to naive UTC for DB storage."""
+    if value is None:
+        return None
+    if isinstance(value, (int, float)) or (isinstance(value, str) and value.isdigit()):
+        return datetime.fromtimestamp(int(value), timezone.utc).replace(tzinfo=None)
+    if isinstance(value, datetime):
+        dt = value
+    else:
+        text = str(value).strip().replace("Z", "+00:00")
+        dt = None
+        for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%d"):
+            try:
+                dt = datetime.strptime(text[:19], fmt)
+                break
+            except Exception:
+                pass
+        if dt is None:
+            try:
+                dt = datetime.fromisoformat(text)
+            except Exception:
+                return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=_EASTERN)
+    return dt.astimezone(timezone.utc).replace(tzinfo=None)
+
+
+def _date_eastern_from_utc(dt):
+    return dt.replace(tzinfo=timezone.utc).astimezone(_EASTERN).date()
 
 
 async def _get_or_create_mapping(db: AsyncSession, account_id: int, campaign_id: str, campaign_name: str) -> int:
@@ -229,6 +261,84 @@ async def sync_joe_subids(account: AffiliateAccount, network_type: str, days_bac
     return synced
 
 
+async def sync_conversions(account: AffiliateAccount, network_type: str, days_back: int = 2):
+    """Pull event-level conversions so dashboard can show actual last conversion time."""
+    try:
+        adapter = get_adapter(
+            network_type=network_type,
+            api_key=account.api_key,
+            api_base_url=account.api_base_url,
+            network_id_value=account.network_id_value,
+            config=account.config_json or {}
+        )
+    except ValueError as e:
+        logger.error(f"Cannot create adapter for conversion sync account {account.id} ({account.label}): {e}")
+        return 0
+
+    if not hasattr(adapter, "get_conversions"):
+        logger.debug(f"Adapter for {account.label} does not support get_conversions — skipping")
+        return 0
+
+    end_date = _today_eastern()
+    start_date = end_date - timedelta(days=days_back)
+
+    try:
+        rows = await adapter.get_conversions(start_date=start_date, end_date=end_date)
+    except Exception as e:
+        logger.error(f"Failed to sync conversions for account {account.id} ({account.label}): {e}")
+        return 0
+
+    synced = 0
+    async with AsyncSessionLocal() as db:
+        for row in rows:
+            network_conversion_id = (row.get("network_conversion_id") or "").strip()
+            conversion_at = _parse_conversion_datetime(row.get("conversion_at"))
+            if not network_conversion_id or conversion_at is None:
+                continue
+
+            result = await db.execute(
+                select(AffiliateConversion).where(
+                    and_(
+                        AffiliateConversion.account_id == account.id,
+                        AffiliateConversion.network_conversion_id == network_conversion_id,
+                    )
+                )
+            )
+            obj = result.scalar_one_or_none()
+            stat_date = _date_eastern_from_utc(conversion_at)
+
+            if obj:
+                obj.conversion_at = conversion_at
+                obj.stat_date = stat_date
+                obj.campaign_id = row.get("campaign_id")
+                obj.campaign_name = row.get("campaign_name")
+                obj.sub_id = row.get("sub_id")
+                obj.sub_id1 = row.get("sub_id1")
+                obj.revenue = row.get("revenue", 0)
+                obj.status = row.get("status")
+                obj.raw_json = row.get("raw", {})
+                obj.synced_at = datetime.utcnow()
+            else:
+                obj = AffiliateConversion(
+                    account_id=account.id,
+                    network_conversion_id=network_conversion_id,
+                    conversion_at=conversion_at,
+                    stat_date=stat_date,
+                    campaign_id=row.get("campaign_id"),
+                    campaign_name=row.get("campaign_name"),
+                    sub_id=row.get("sub_id"),
+                    sub_id1=row.get("sub_id1"),
+                    revenue=row.get("revenue", 0),
+                    status=row.get("status"),
+                    raw_json=row.get("raw", {}),
+                )
+                db.add(obj)
+            synced += 1
+        await db.commit()
+    logger.info(f"Synced {synced} conversion rows for account {account.label}")
+    return synced
+
+
 async def sync_all_accounts(days_back: int = 1):
     """Sync all active affiliate accounts."""
     async with AsyncSessionLocal() as db:
@@ -243,6 +353,7 @@ async def sync_all_accounts(days_back: int = 1):
     for account, network_type in accounts:
         count = await sync_account(account, network_type, days_back=days_back)
         await sync_joe_subids(account, network_type, days_back=days_back)
+        await sync_conversions(account, network_type, days_back=max(days_back, 2))
         total += count
     logger.info(f"Total sync complete: {total} rows across {len(accounts)} accounts")
     return total
