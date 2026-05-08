@@ -111,10 +111,21 @@ async def sync_account(account: AffiliateAccount, network_type: str, days_back: 
             stat_obj = existing.scalars().first()
 
             if stat_obj:
-                stat_obj.clicks = row.get("clicks", 0)
-                stat_obj.conversions = row.get("conversions", 0)
-                stat_obj.revenue = row.get("revenue", 0)
-                stat_obj.payout = row.get("payout", 0)
+                new_clicks = row.get("clicks", 0)
+                new_conversions = row.get("conversions", 0)
+                new_revenue = row.get("revenue", 0)
+                new_payout = row.get("payout", 0)
+                if (
+                    stat_obj.clicks != new_clicks
+                    or stat_obj.conversions != new_conversions
+                    or float(stat_obj.revenue or 0) != float(new_revenue or 0)
+                    or float(stat_obj.payout or 0) != float(new_payout or 0)
+                ):
+                    stat_obj.synced_at = datetime.utcnow()
+                stat_obj.clicks = new_clicks
+                stat_obj.conversions = new_conversions
+                stat_obj.revenue = new_revenue
+                stat_obj.payout = new_payout
                 stat_obj.raw_json = row.get("raw", {})
             else:
                 stat_obj = AffiliateStat(

@@ -9,7 +9,7 @@ EASTERN = zoneinfo.ZoneInfo("America/New_York")
 def today_eastern() -> datetime.date:
     return datetime.datetime.now(EASTERN).date()
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, and_
+from sqlalchemy import select, func, and_, case
 
 from backend.database import get_db
 from backend.models.stats import AffiliateStat
@@ -59,6 +59,9 @@ async def get_summary(
             func.coalesce(func.sum(AffiliateStat.revenue), 0).label("revenue"),
             func.coalesce(func.sum(AffiliateStat.clicks), 0).label("clicks"),
             func.coalesce(func.sum(AffiliateStat.conversions), 0).label("conversions"),
+            func.max(
+                case((AffiliateStat.conversions > 0, AffiliateStat.synced_at), else_=None)
+            ).label("last_conversion_at"),
         )
         .join(CampaignMapping, AffiliateStat.campaign_mapping_id == CampaignMapping.id)
     )
@@ -72,6 +75,10 @@ async def get_summary(
     q = q.where(and_(*filters))
     result = await db.execute(q)
     row = result.one()
+    last_conversion_at = None
+    if row.last_conversion_at:
+        last_conversion_at = row.last_conversion_at.replace(tzinfo=datetime.timezone.utc).astimezone(EASTERN).isoformat()
+
     return {
         "period": period,
         "start": str(start),
@@ -79,6 +86,7 @@ async def get_summary(
         "revenue": float(row.revenue),
         "clicks": int(row.clicks),
         "conversions": int(row.conversions),
+        "last_conversion_at": last_conversion_at,
     }
 
 

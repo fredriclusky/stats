@@ -5,7 +5,7 @@ import api from '../api'
 const PERIODS = ['today', 'yesterday', 'week', 'month', 'year'] as const
 type Period = typeof PERIODS[number] | 'custom'
 
-interface Summary { revenue: number; clicks: number; conversions: number; start: string; end: string }
+interface Summary { revenue: number; clicks: number; conversions: number; start: string; end: string; last_conversion_at?: string | null }
 interface CampaignRow { campaign_id: number; campaign_name: string; revenue: number; clicks: number; conversions: number }
 interface DayRow { date: string; revenue: number }
 interface AccountRow { account_id: number; account_label: string; network_name: string; revenue: number; clicks: number; conversions: number }
@@ -106,6 +106,10 @@ export default function Dashboard() {
   }
 
   const fmt = (n: number) => '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  const fmtLastConversion = (value?: string | null) => {
+    if (!value) return 'No conversions yet'
+    return 'Last conversion: ' + new Date(value).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+  }
 
   const periodLabel = period === 'custom'
     ? `${customStart} → ${customEnd}`
@@ -243,7 +247,7 @@ export default function Dashboard() {
         <>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <StatCard label="Revenue" value={fmt(summary?.revenue || 0)} />
-            <StatCard label="Conversions" value={(summary?.conversions || 0).toLocaleString()} />
+            <StatCard label="Conversions" value={(summary?.conversions || 0).toLocaleString()} sub={fmtLastConversion(summary?.last_conversion_at)} />
             <StatCard label="Clicks" value={(summary?.clicks || 0).toLocaleString()} />
             <StatCard
               label="EPC"
