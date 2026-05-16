@@ -277,8 +277,12 @@ export default function Dashboard() {
 
           {daily.length > 0 && (
             <>
-              <div className="bg-gray-900 rounded-xl border border-gray-800 p-4">
-                <div className="text-gray-400 text-sm font-medium mb-4">Revenue Trend</div>
+              <div
+                onClick={() => { window.location.href = '/revenue-trend' }}
+                className="bg-gray-900 rounded-xl border border-gray-800 p-4 cursor-pointer hover:border-green-500/50 transition"
+                title="Click to view revenue by hour"
+              >
+                <div className="text-gray-400 text-sm font-medium mb-4">Revenue Trend <span className="text-gray-600 text-xs font-normal">(click for hourly)</span></div>
                 <ResponsiveContainer width="100%" height={180}>
                   <AreaChart data={daily}>
                     <defs>

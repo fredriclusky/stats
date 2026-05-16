@@ -12,6 +12,7 @@ import OfferIntelligence from './pages/OfferIntelligence'
 import PartnerView from './pages/PartnerView'
 import KarlinStats from './pages/KarlinStats'
 import EpcTrend from './pages/EpcTrend'
+import RevenueTrend from './pages/RevenueTrend'
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const token = localStorage.getItem('token')
@@ -46,6 +47,7 @@ export default function App() {
         <Route path="/suggestions" element={<RequireAuth><RequireAdmin><Layout><Suggestions /></Layout></RequireAdmin></RequireAuth>} />
         <Route path="/offers" element={<RequireAuth><RequireAdmin><Layout><OfferIntelligence /></Layout></RequireAdmin></RequireAuth>} />
         <Route path="/epc-trend" element={<RequireAuth><RequireAdmin><Layout><EpcTrend /></Layout></RequireAdmin></RequireAuth>} />
+        <Route path="/revenue-trend" element={<RequireAuth><RequireAdmin><Layout><RevenueTrend /></Layout></RequireAdmin></RequireAuth>} />
         <Route path="/schedule" element={<RequireAuth><RequireAdmin><Layout><Schedule /></Layout></RequireAdmin></RequireAuth>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
