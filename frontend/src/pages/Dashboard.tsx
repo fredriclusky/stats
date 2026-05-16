@@ -7,7 +7,7 @@ type Period = typeof PERIODS[number] | 'custom'
 
 interface Summary { revenue: number; clicks: number; conversions: number; start: string; end: string; last_conversion_at?: string | null }
 interface CampaignRow { campaign_id: number; campaign_name: string; revenue: number; clicks: number; conversions: number }
-interface DayRow { date: string; revenue: number }
+interface DayRow { date: string; revenue: number; clicks: number }
 interface AccountRow { account_id: number; account_label: string; network_name: string; revenue: number; clicks: number; conversions: number }
 
 function StatCard({ label, value, sub }: { label: string; value: string; sub?: string }) {
@@ -276,26 +276,49 @@ export default function Dashboard() {
           )}
 
           {daily.length > 0 && (
-            <div className="bg-gray-900 rounded-xl border border-gray-800 p-4">
-              <div className="text-gray-400 text-sm font-medium mb-4">Revenue Trend</div>
-              <ResponsiveContainer width="100%" height={180}>
-                <AreaChart data={daily}>
-                  <defs>
-                    <linearGradient id="rev" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#22c55e" stopOpacity={0.3} />
-                      <stop offset="95%" stopColor="#22c55e" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#6b7280' }} tickLine={false} />
-                  <YAxis tick={{ fontSize: 11, fill: '#6b7280' }} tickLine={false} axisLine={false} tickFormatter={(v) => '$' + v} />
-                  <Tooltip
-                    contentStyle={{ background: '#111827', border: '1px solid #374151', borderRadius: 8 }}
-                    formatter={(v: any) => [fmt(Number(v)), 'Revenue']}
-                  />
-                  <Area type="monotone" dataKey="revenue" stroke="#22c55e" strokeWidth={2} fill="url(#rev)" />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
+            <>
+              <div className="bg-gray-900 rounded-xl border border-gray-800 p-4">
+                <div className="text-gray-400 text-sm font-medium mb-4">Revenue Trend</div>
+                <ResponsiveContainer width="100%" height={180}>
+                  <AreaChart data={daily}>
+                    <defs>
+                      <linearGradient id="rev" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#22c55e" stopOpacity={0.3} />
+                        <stop offset="95%" stopColor="#22c55e" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#6b7280' }} tickLine={false} />
+                    <YAxis tick={{ fontSize: 11, fill: '#6b7280' }} tickLine={false} axisLine={false} tickFormatter={(v) => '$' + v} />
+                    <Tooltip
+                      contentStyle={{ background: '#111827', border: '1px solid #374151', borderRadius: 8 }}
+                      formatter={(v: any) => [fmt(Number(v)), 'Revenue']}
+                    />
+                    <Area type="monotone" dataKey="revenue" stroke="#22c55e" strokeWidth={2} fill="url(#rev)" />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+
+              <div className="bg-gray-900 rounded-xl border border-gray-800 p-4">
+                <div className="text-gray-400 text-sm font-medium mb-4">EPC Trend</div>
+                <ResponsiveContainer width="100%" height={180}>
+                  <AreaChart data={daily.map(d => ({ ...d, epc: d.clicks ? d.revenue / d.clicks : 0 }))}>
+                    <defs>
+                      <linearGradient id="epc" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#60a5fa" stopOpacity={0.3} />
+                        <stop offset="95%" stopColor="#60a5fa" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#6b7280' }} tickLine={false} />
+                    <YAxis tick={{ fontSize: 11, fill: '#6b7280' }} tickLine={false} axisLine={false} tickFormatter={(v) => '$' + Number(v).toFixed(2)} />
+                    <Tooltip
+                      contentStyle={{ background: '#111827', border: '1px solid #374151', borderRadius: 8 }}
+                      formatter={(v: any) => [fmt(Number(v)), 'EPC']}
+                    />
+                    <Area type="monotone" dataKey="epc" stroke="#60a5fa" strokeWidth={2} fill="url(#epc)" />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            </>
           )}
 
           <div className="bg-gray-900 rounded-xl border border-gray-800 overflow-hidden">
