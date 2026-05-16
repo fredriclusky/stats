@@ -318,3 +318,35 @@ class HasOffersAdapter(BaseAdapter):
                 "raw": stat,
             })
         return results
+
+
+    async def get_hourly_stats(self, stat_date) -> list[dict]:
+        """Pull hourly clicks/conversions/revenue for one date."""
+        target = "Report" if self.access_mode == "network" else "Affiliate_Report"
+        params = {
+            "fields[]": [
+                "Stat.hour",
+                "Stat.clicks",
+                "Stat.conversions",
+                "Stat.payout",
+            ],
+            "groups[]": ["Stat.hour"],
+            "filters[Stat.date][conditional]": "EQUAL_TO",
+            "filters[Stat.date][values][]": str(stat_date),
+            "totals": "1",
+        }
+        rows = await self._request_all_pages(target, "getStats", params)
+        results = []
+        for row in rows:
+            stat = row.get("Stat", row)
+            try:
+                hour = int(stat.get("hour", 0) or 0)
+            except Exception:
+                hour = 0
+            results.append({
+                "hour": hour,
+                "clicks": int(stat.get("clicks", 0) or 0),
+                "conversions": int(stat.get("conversions", 0) or 0),
+                "revenue": float(stat.get("payout", 0) or 0),
+            })
+        return results

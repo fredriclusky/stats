@@ -298,8 +298,12 @@ export default function Dashboard() {
                 </ResponsiveContainer>
               </div>
 
-              <div className="bg-gray-900 rounded-xl border border-gray-800 p-4">
-                <div className="text-gray-400 text-sm font-medium mb-4">EPC Trend</div>
+              <div
+                onClick={() => { window.location.href = '/epc-trend' }}
+                className="bg-gray-900 rounded-xl border border-gray-800 p-4 cursor-pointer hover:border-blue-500/50 transition"
+                title="Click to view EPC by hour"
+              >
+                <div className="text-gray-400 text-sm font-medium mb-4">EPC Trend <span className="text-gray-600 text-xs font-normal">(click for hourly)</span></div>
                 <ResponsiveContainer width="100%" height={180}>
                   <AreaChart data={daily.map(d => ({ ...d, epc: d.clicks ? d.revenue / d.clicks : 0 }))}>
                     <defs>

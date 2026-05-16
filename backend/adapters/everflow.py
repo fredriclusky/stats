@@ -39,6 +39,26 @@ class EverflowAdapter(BaseAdapter):
                 return c.get("label", "")
         return ""
 
+    def _parse_hour_value(self, value, label="") -> int:
+        """Parse Everflow hour column values, which may be 0-23, a unix timestamp, or a label."""
+        for candidate in (value, label):
+            if candidate is None:
+                continue
+            text = str(candidate).strip()
+            if text.isdigit():
+                num = int(text)
+                if 0 <= num <= 23:
+                    return num
+                try:
+                    return datetime.utcfromtimestamp(num).hour
+                except Exception:
+                    pass
+            import re
+            match = re.search(r"\b([01]?\d|2[0-3])(?::00)?\b", text)
+            if match:
+                return int(match.group(1))
+        return 0
+
     def _ts_to_date(self, ts) -> Optional[str]:
         """Convert a Unix timestamp (or date string) to YYYY-MM-DD."""
         if not ts:
@@ -274,5 +294,40 @@ class EverflowAdapter(BaseAdapter):
                 "revenue": float(revenue or 0),
                 "status": conv.get("conversion_status") or conv.get("status"),
                 "raw": conv,
+            })
+        return results
+
+
+    async def get_hourly_stats(self, stat_date) -> list[dict]:
+        """Pull hourly clicks/conversions/revenue for one date."""
+        payload = {
+            "from": f"{stat_date} 00:00:00",
+            "to": f"{stat_date} 23:59:59",
+            "timezone_id": self.timezone_id,
+            "currency_id": "USD",
+            "columns": [
+                {"column": "hour"},
+            ],
+            "query": {"filters": []},
+        }
+        async with httpx.AsyncClient(timeout=60) as client:
+            resp = await client.post(
+                f"{self.base_url}/affiliates/reporting/entity/table",
+                headers=self._headers(),
+                json=payload,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+
+        results = []
+        for row in data.get("table", []):
+            cols = row.get("columns", [])
+            rep = row.get("reporting", {})
+            hour = self._parse_hour_value(self._col(cols, "hour"), self._col_label(cols, "hour"))
+            results.append({
+                "hour": hour,
+                "clicks": int(rep.get("total_click", 0) or 0),
+                "conversions": int(rep.get("cv", 0) or 0),
+                "revenue": float(rep.get("revenue", 0) or 0),
             })
         return results

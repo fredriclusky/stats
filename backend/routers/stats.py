@@ -1,4 +1,5 @@
 from datetime import timedelta
+import asyncio
 from typing import Optional
 from fastapi import APIRouter, Depends, Query
 import datetime
@@ -17,6 +18,7 @@ from backend.models.campaign import Campaign, CampaignMapping
 from backend.models.affiliate import AffiliateAccount, AffiliateNetwork
 from backend.models.conversion import AffiliateConversion
 from backend.routers.auth import require_admin, require_any_role
+from backend.adapters import get_adapter
 
 router = APIRouter(prefix="/api/stats", tags=["stats"])
 
@@ -517,3 +519,117 @@ async def joe_subids(
         }
         for g in sorted_groups
     ]
+
+
+
+@router.get("/epc-dates")
+async def epc_dates(
+    period: str = Query("month"),
+    start_date: Optional[str] = Query(None),
+    end_date: Optional[str] = Query(None),
+    db: AsyncSession = Depends(get_db),
+    _=Depends(require_admin),
+):
+    """Daily EPC rows used by the EPC drilldown page date list."""
+    start, end = get_date_range(period, start_date, end_date)
+    result = await db.execute(
+        select(
+            AffiliateStat.stat_date.label("stat_date"),
+            func.coalesce(func.sum(AffiliateStat.revenue), 0).label("revenue"),
+            func.coalesce(func.sum(AffiliateStat.clicks), 0).label("clicks"),
+            func.coalesce(func.sum(AffiliateStat.conversions), 0).label("conversions"),
+        )
+        .where(AffiliateStat.stat_date >= start, AffiliateStat.stat_date <= end)
+        .group_by(AffiliateStat.stat_date)
+        .order_by(AffiliateStat.stat_date.desc())
+    )
+    rows = result.all()
+    return [
+        {
+            "date": str(r.stat_date),
+            "revenue": float(r.revenue),
+            "clicks": int(r.clicks),
+            "conversions": int(r.conversions),
+            "epc": round(float(r.revenue) / int(r.clicks), 6) if int(r.clicks) else 0,
+        }
+        for r in rows
+    ]
+
+
+@router.get("/epc-hourly")
+async def epc_hourly(
+    date_value: str = Query(..., alias="date"),
+    db: AsyncSession = Depends(get_db),
+    _=Depends(require_admin),
+):
+    """Live hourly EPC for a selected date across all active accounts."""
+    try:
+        selected_date = datetime.date.fromisoformat(date_value)
+    except ValueError:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail="Invalid date. Use YYYY-MM-DD.")
+
+    result = await db.execute(
+        select(AffiliateAccount, AffiliateNetwork.network_type, AffiliateNetwork.name.label("network_name"))
+        .join(AffiliateNetwork, AffiliateAccount.network_id == AffiliateNetwork.id)
+        .where(AffiliateAccount.active == True, AffiliateNetwork.active == True)
+    )
+    accounts = result.all()
+
+    buckets = {
+        hour: {"hour": hour, "revenue": 0.0, "clicks": 0, "conversions": 0, "accounts": []}
+        for hour in range(24)
+    }
+    errors = []
+
+    for account, network_type, network_name in accounts:
+        try:
+            adapter = get_adapter(
+                network_type=network_type,
+                api_key=account.api_key,
+                api_base_url=account.api_base_url,
+                network_id_value=account.network_id_value,
+                config=account.config_json or {},
+            )
+            if not hasattr(adapter, "get_hourly_stats"):
+                continue
+            rows = await adapter.get_hourly_stats(selected_date)
+            for row in rows:
+                hour = int(row.get("hour", 0) or 0)
+                if hour < 0 or hour > 23:
+                    continue
+                revenue = float(row.get("revenue", 0) or 0)
+                clicks = int(row.get("clicks", 0) or 0)
+                conversions = int(row.get("conversions", 0) or 0)
+                buckets[hour]["revenue"] += revenue
+                buckets[hour]["clicks"] += clicks
+                buckets[hour]["conversions"] += conversions
+                if revenue or clicks or conversions:
+                    buckets[hour]["accounts"].append({
+                        "account_id": account.id,
+                        "account_label": account.label,
+                        "network_name": network_name,
+                        "revenue": revenue,
+                        "clicks": clicks,
+                        "conversions": conversions,
+                        "epc": round(revenue / clicks, 6) if clicks else 0,
+                    })
+        except Exception as e:
+            errors.append({"account": account.label, "error": str(e)[:200]})
+
+    rows = []
+    for hour in range(24):
+        bucket = buckets[hour]
+        clicks = bucket["clicks"]
+        revenue = bucket["revenue"]
+        rows.append({
+            "hour": hour,
+            "label": f"{hour:02d}:00",
+            "revenue": round(revenue, 2),
+            "clicks": clicks,
+            "conversions": bucket["conversions"],
+            "epc": round(revenue / clicks, 6) if clicks else 0,
+            "accounts": bucket["accounts"],
+        })
+
+    return {"date": str(selected_date), "rows": rows, "errors": errors}
